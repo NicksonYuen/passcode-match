@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>密碼配對 Passcode Match</title>
+<meta name="theme-color" content="#F4F7FB">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="密碼配對">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one screen at a time. Code on top, answer slots aligned directly under it, big phone-style keypad below. Calm single light theme on purpose. */
+:root{
+  --bg:#F4F7FB;
+  --surface:#FFFFFF;
+  --ink:#10213A;
+  --muted:#5A6A80;
+  --line:#C8D2E0;
+  --next:#FFC93C;
+  --good:#1E9A53;
+  --bad:#D2433F;
+  --font:"Atkinson Hyperlegible","PingFang HK","Heiti TC","Microsoft JhengHei",system-ui,sans-serif;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;margin:0;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden}
+button{font-family:inherit;color:inherit;touch-action:manipulation;cursor:pointer}
+button:focus-visible{outline:4px solid var(--ink);outline-offset:3px}
+.screen{height:100%;box-sizing:border-box;padding:16px 16px;display:flex;flex-direction:column}
+
+/* ---------- Home ---------- */
+#home{align-items:center;justify-content:center;gap:28px;overflow-y:auto}
+.brand{display:flex;flex-direction:column;align-items:center;gap:6px}
+.brand h1{margin:0;font-size:clamp(2.2rem,6vw,3.4rem);letter-spacing:.02em;text-wrap:balance}
+.brand p{margin:0;color:var(--muted);font-size:1.15rem}
+.lock{display:flex;gap:8px}
+.lock span{width:44px;height:52px;border-radius:10px;border:3px solid var(--ink);display:grid;place-items:center;font-weight:700;font-size:1.6rem;background:var(--surface)}
+.lock span.on{background:var(--next)}
+.pick{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:560px}
+.pick h2{margin:0;font-size:1.35rem}
+.levels{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;width:100%}
+.lv{aspect-ratio:1;max-width:100%;border:3px solid var(--line);background:var(--surface);border-radius:18px;font-size:clamp(1.6rem,5vw,2.4rem);font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.lv small{font-size:.8rem;font-weight:400;color:var(--muted);margin-top:4px}
+.lv[aria-pressed="true"]{border-color:var(--ink);background:var(--next)}
+.lv[aria-pressed="true"] small{color:var(--ink)}
+.start{border:0;background:var(--ink);color:#fff;font-size:2rem;font-weight:700;border-radius:999px;padding:18px 64px;box-shadow:0 6px 0 #04101F}
+.start:active{transform:translateY(4px);box-shadow:0 2px 0 #04101F}
+.parent{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.ghost{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 16px;font-size:1rem}
+.voice{margin:0;font-size:.95rem;color:var(--muted);text-align:center;max-width:520px;line-height:1.45}
+.voice.warn{color:var(--bad)}
+
+/* ---------- Play ---------- */
+#play{gap:clamp(8px,2vh,20px);align-items:center;position:relative}
+.bar{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center}
+.hold{position:relative;overflow:hidden;border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 14px;font-size:.95rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hold i{position:absolute;left:0;bottom:0;height:5px;width:0;background:var(--ink)}
+.hold.go i{width:100%;transition:width 1.5s linear}
+.listen{border:3px solid var(--ink);background:var(--surface);border-radius:999px;padding:10px 22px 10px 16px;font-size:1.25rem;font-weight:700;display:flex;align-items:center;gap:10px}
+.listen svg{width:30px;height:30px}
+.listen:active{background:var(--next)}
+/* Shared sizing: the code card and the calculator are the same width, so code boxes sit directly above answer slots */
+#play{
+  --W:min(calc(100vw - 32px), 620px);
+  --dev-pad:18px; --lcd-pad:12px; --gap:8px;
+  --box:min(84px, calc((var(--W) - 2 * var(--dev-pad) - 2 * var(--lcd-pad) - (var(--n, 2) - 1) * var(--gap)) / var(--n, 2)), 9vh);
+  --kh:clamp(56px, 10.2vh, 130px);
+  justify-content:space-evenly;
+}
+.bar{max-width:var(--W)}
+.lab{font-size:1rem;color:var(--muted);letter-spacing:.08em;font-weight:700}
+.row{display:flex;gap:var(--gap);justify-content:center}
+.cd,.slot{width:var(--box);height:calc(var(--box) * 1.2);border-radius:calc(var(--box) * .16);display:grid;place-items:center;
+  font-weight:700;font-size:calc(var(--box) * .72);font-variant-numeric:tabular-nums;line-height:1;box-sizing:border-box}
+
+/* Question card: plain white paper */
+.question{width:var(--W);box-sizing:border-box;background:var(--surface);border:3px solid var(--line);border-radius:24px;
+  padding:14px calc(var(--dev-pad) + var(--lcd-pad)) 20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.cd{background:var(--surface);border:3px solid var(--line);color:var(--ink);padding:0}
+.cd.next{background:var(--next);border-color:var(--ink);animation:breathe 1.8s ease-in-out infinite}
+.cd.done{color:var(--good);border-color:var(--good);background:#EAF7EF}
+.arrow{color:var(--ink);line-height:0}
+.arrow svg{width:44px;height:44px}
+@keyframes breathe{50%{transform:scale(1.07)}}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+
+/* Answer area: a dark calculator with a green LCD screen and white keys */
+.calc{width:var(--W);box-sizing:border-box;background:#1B2B47;border-radius:32px;padding:var(--dev-pad);
+  display:flex;flex-direction:column;gap:var(--dev-pad);box-shadow:0 10px 0 #0B1628, 0 18px 30px rgba(16,33,58,.25)}
+.lcd{background:#C9E4B8;border-radius:16px;padding:var(--lcd-pad);box-shadow:inset 0 4px 0 rgba(0,0,0,.18);border:3px solid #0B1628}
+.slot{border:3px dashed #7FA16C;background:transparent;color:#10213A}
+.slot.next{border:4px solid #10213A;background:var(--next)}
+.slot.done{border:3px solid #10213A;background:#E9F5E0}
+.slot.wrong{border:3px solid var(--bad);background:#FBE4E3;color:var(--bad);animation:shake .45s}
+
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.key{height:var(--kh);border-radius:18px;border:0;background:#F4F6FA;color:#10213A;
+  font-size:calc(var(--kh) * .52);font-weight:700;box-shadow:0 6px 0 #8A97AB;font-variant-numeric:tabular-nums}
+.key:active{transform:translateY(5px);box-shadow:0 1px 0 #8A97AB;background:var(--next)}
+.key.zero{grid-column:2}
+.pad.locked .key{opacity:.6}
+
+.cheer{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.cheer b{font-size:clamp(3rem,12vw,7rem);color:var(--ink);background:var(--next);padding:.15em .5em;border-radius:.35em;
+  border:5px solid var(--ink);animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.3);opacity:0}}
+#play.glow{animation:glow 1.2s ease-in-out 2}
+@keyframes glow{50%{background:#FFF1C7}}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+
+/* ---------- Records ---------- */
+#records{gap:16px;overflow-y:auto;align-items:center}
+.rec-wrap{width:100%;max-width:760px;display:flex;flex-direction:column;gap:16px}
+.rec-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.rec-head h2{margin:0;font-size:1.6rem}
+.totals{display:flex;gap:12px;flex-wrap:wrap}
+.tot{background:var(--surface);border:2px solid var(--line);border-radius:14px;padding:12px 16px;min-width:120px}
+.tot span{display:block;color:var(--muted);font-size:.85rem}
+.tot strong{font-size:1.6rem;font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto;background:var(--surface);border:2px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:.85rem;color:var(--muted);font-weight:400;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+.empty{padding:24px;color:var(--muted);text-align:center}
+.confirm{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.danger{border-color:var(--bad);color:var(--bad)}
+
+@media (prefers-reduced-motion:reduce){
+  .cd.next{animation:none}
+  .slot.wrong{animation:none}
+}
+@media (max-height:600px) and (orientation:landscape){ #home{justify-content:flex-start} }
+</style>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+img{max-width:100%}
+.screen{padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+</style>
+</head>
+<body>
+<section class="screen" id="home">
+  <div class="brand">
+    <div class="lock" aria-hidden="true"><span class="on">3</span><span>7</span><span>1</span></div>
+    <h1>密碼配對</h1>
+    <p>Passcode Match</p>
+  </div>
+  <div class="pick">
+    <h2>幾多位數字？</h2>
+    <div class="levels" id="levels"></div>
+  </div>
+  <button class="start" id="startBtn" type="button">開始</button>
+  <div class="parent">
+    <button class="ghost" id="testBtn" type="button">試聲 Test sound</button>
+    <button class="ghost" id="recBtn" type="button">紀錄 Records</button>
+  </div>
+  <p class="voice" id="voiceStatus">正在檢查廣東話聲音…</p>
+</section>
+
+<section class="screen" id="play" hidden>
+  <div class="bar">
+    <button class="hold" id="holdBtn" type="button" aria-label="Hold to go back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      按住返回<i></i>
+    </button>
+    <button class="listen" id="listenBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      聽密碼
+    </button>
+  </div>
+  <div class="question">
+    <div class="lab">密碼</div>
+    <div class="row" id="codeRow"></div>
+  </div>
+  <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15"/><path d="M6 13l6 6 6-6"/></svg></div>
+  <div class="calc">
+    <div class="lcd"><div class="row" id="slotRow"></div></div>
+    <div class="pad" id="pad"></div>
+  </div>
+  <div class="cheer" id="cheer" hidden><b>做得好！</b></div>
+</section>
+
+<section class="screen" id="records" hidden>
+  <div class="rec-wrap">
+    <div class="rec-head">
+      <button class="ghost" id="recBack" type="button">← 返回</button>
+      <h2>遊戲紀錄</h2>
+      <span></span>
+    </div>
+    <div class="totals" id="totals"></div>
+    <div class="tbl" id="recTable"></div>
+    <div class="confirm" id="clearArea"></div>
+  </div>
+</section>
+
+<canvas id="fx" hidden></canvas>
+
+<script>
+(function(){
+const ZH=['零','一','二','三','四','五','六','七','八','九'];
+const SAY_WRONG='哎呀，請再試一次。';
+const SAY_WIN='你做得好好呀！你係個乖仔！';
+const SAY_RETRY='請再試一次。';
+const IDLE_MS=10000;
+const $=id=>document.getElementById(id);
+
+/* ---------- storage ---------- */
+function load(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+/* ---------- state ---------- */
+let level=load('pm_level',2);
+let code=[],pos=0,locked=false,prev='',idleTimer=null,session=null,wakeLock=null,current='home';
+
+/* ---------- audio effects ---------- */
+let ac=null;
+function audio(){
+  if(!ac){const C=window.AudioContext||window.webkitAudioContext;if(C)ac=new C()}
+  if(ac&&ac.state==='suspended')ac.resume();
+  return ac;
+}
+function tone(f,start,dur,type,vol,endF){
+  const a=audio();if(!a)return;
+  const t=a.currentTime+start,o=a.createOscillator(),g=a.createGain();
+  o.type=type||'sine';o.frequency.setValueAtTime(f,t);
+  if(endF)o.frequency.exponentialRampToValueAtTime(endF,t+dur);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol||0.25,t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+dur+0.05);
+}
+const sfx={
+  good(){tone(784,0,.18,'triangle',.32);tone(1175,.09,.3,'triangle',.32)},
+  bad(){tone(392,0,.4,'sine',.22,247)},
+  win(){[523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.11,.45,'triangle',.28))},
+  pop(){tone(220,0,.14,'sine',.12,90)}
+};
+
+/* ---------- Cantonese speech ---------- */
+let voice=null,speechId=0;
+const hasTTS='speechSynthesis' in window;
+function pickVoice(){
+  if(!hasTTS)return statusVoice();
+  const vs=speechSynthesis.getVoices();
+  voice=vs.find(v=>/zh[-_]HK/i.test(v.lang))||vs.find(v=>/yue/i.test(v.lang))||vs.find(v=>/Sinji|Cantonese|粵|廣東/i.test(v.name))||null;
+  statusVoice(vs.length>0);
+}
+function statusVoice(loaded){
+  const el=$('voiceStatus');
+  if(!hasTTS){el.textContent='呢部機唔支援語音朗讀，遊戲只會有音效。';el.className='voice warn';return}
+  if(voice){el.textContent='廣東話聲音：'+voice.name+'。開始前可以撳「試聲」聽吓。';el.className='voice';return}
+  if(loaded===false)return;
+  el.innerHTML='搵唔到廣東話聲音。iPad：設定 › 輔助使用 › 朗讀內容 › 聲音 › 中文（香港），下載「Sinji」。<br>No Cantonese voice found: Settings › Accessibility › Spoken Content › Voices › Chinese (Hong Kong).';
+  el.className='voice warn';
+}
+if(hasTTS){pickVoice();speechSynthesis.onvoiceschanged=pickVoice;setTimeout(pickVoice,800)}
+function stopSpeech(){speechId++;if(hasTTS)speechSynthesis.cancel()}
+function say(text,onend){
+  const id=++speechId;
+  let done=false;
+  const fin=()=>{if(done||id!==speechId)return;done=true;onend&&onend()};
+  if(!hasTTS){setTimeout(fin,600);return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='zh-HK';if(voice)u.voice=voice;u.rate=.85;u.pitch=1.05;
+  u.onend=fin;u.onerror=fin;
+  setTimeout(()=>{if(id===speechId)speechSynthesis.speak(u)},60);
+  setTimeout(fin,2000+text.length*420); /* safety net if the browser never fires onend */
+}
+const codeText=()=>code.map(d=>ZH[d]).join('，');
+
+/* ---------- screens ---------- */
+function show(name){
+  current=name;
+  ['home','play','records'].forEach(s=>$(s).hidden=s!==name);
+}
+
+/* ---------- home ---------- */
+function buildLevels(){
+  const box=$('levels');box.innerHTML='';
+  for(let n=2;n<=10;n++){
+    const b=document.createElement('button');
+    b.type='button';b.className='lv';b.id='lv'+n;
+    b.setAttribute('aria-pressed',String(n===level));
+    b.innerHTML=n+'<small>位</small>';
+    b.onclick=()=>{level=n;store('pm_level',n);buildLevels()};
+    box.appendChild(b);
+  }
+}
+$('testBtn').onclick=()=>{audio();sfx.good();setTimeout(()=>say('你好！'+ZH[3]+'，'+ZH[7]+'。'+SAY_WIN),400)};
+$('recBtn').onclick=()=>{renderRecords();show('records')};
+$('recBack').onclick=()=>show('home');
+$('startBtn').onclick=startGame;
+
+/* ---------- keypad ---------- */
+function buildPad(){
+  const pad=$('pad');pad.innerHTML='';
+  [1,2,3,4,5,6,7,8,9,0].forEach(d=>{
+    const b=document.createElement('button');
+    b.type='button';b.className='key'+(d===0?' zero':'');b.id='key'+d;b.textContent=d;
+    b.onclick=()=>press(d);
+    pad.appendChild(b);
+  });
+}
+
+/* ---------- game ---------- */
+function startGame(){
+  audio();
+  session=null;
+  show('play');
+  buildPad();
+  if(navigator.wakeLock&&navigator.wakeLock.request){navigator.wakeLock.request('screen').then(l=>wakeLock=l).catch(()=>{})}
+  newRound(true);
+}
+function newRound(first){
+  let c;
+  do{c=Array.from({length:level},()=>Math.floor(Math.random()*10))}while(c.join('')===prev);
+  prev=c.join('');code=c;pos=0;
+  $('cheer').hidden=true;
+  setLocked(false);
+  render();
+  if(first){clearIdle();say('開始！',armIdle)}else armIdle();
+}
+function setLocked(v){locked=v;$('pad').classList.toggle('locked',v)}
+function render(wrongDigit){
+  const cr=$('codeRow'),sr=$('slotRow');
+  $('play').style.setProperty('--n',code.length);
+  cr.innerHTML='';sr.innerHTML='';
+  code.forEach((d,i)=>{
+    const c=document.createElement('button');
+    c.type='button';c.className='cd'+(i<pos?' done':i===pos?' next':'');c.textContent=d;
+    c.setAttribute('aria-label','讀出 '+d);
+    c.onclick=()=>{clearIdle();say(ZH[d],armIdle)};
+    cr.appendChild(c);
+    const s=document.createElement('div');
+    s.className='slot'+(i<pos?' done':i===pos?(wrongDigit!=null?' wrong':' next'):'');
+    s.textContent=i<pos?d:(i===pos&&wrongDigit!=null?wrongDigit:'');
+    sr.appendChild(s);
+  });
+}
+function ensureSession(){
+  if(!session)session={id:Date.now(),start:Date.now(),level,done:0,mistakes:0,ms:0};
+}
+function saveSession(){
+  if(!session)return;
+  session.ms=Date.now()-session.start;
+  const recs=load('pm_records',[]);
+  const i=recs.findIndex(r=>r.id===session.id);
+  if(i>=0)recs[i]=session;else recs.push(session);
+  store('pm_records',recs.slice(-300));
+}
+function press(d){
+  if(locked||current!=='play')return;
+  ensureSession();
+  stopSpeech();clearIdle();
+  if(d===code[pos]){
+    sfx.good();pos++;render();
+    if(pos===code.length){win();return}
+    saveSession();armIdle();
+  }else{
+    sfx.bad();session.mistakes++;saveSession();
+    setLocked(true);render(d);
+    setTimeout(()=>say(SAY_WRONG,()=>{pos=0;setLocked(false);render();armIdle()}),420);
+  }
+}
+function win(){
+  setLocked(true);clearIdle();
+  session.done++;saveSession();
+  sfx.win();
+  $('cheer').hidden=false;
+  const p=$('play');p.classList.remove('glow');void p.offsetWidth;p.classList.add('glow');
+  fireworks();
+  setTimeout(()=>say(SAY_WIN,()=>setTimeout(()=>{if(current==='play')newRound()},1200)),650);
+}
+function armIdle(){clearIdle();if(current==='play'&&!document.hidden)idleTimer=setTimeout(onIdle,IDLE_MS)}
+function clearIdle(){clearTimeout(idleTimer);idleTimer=null}
+function onIdle(){
+  if(locked||current!=='play')return;
+  say(codeText()+'。'+SAY_RETRY,armIdle);
+}
+$('listenBtn').onclick=()=>{if(locked)return;clearIdle();say(codeText(),armIdle)};
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearIdle();stopSpeech()}else if(current==='play'&&!locked)armIdle()});
+
+function endGame(){
+  clearIdle();stopSpeech();setLocked(false);
+  saveSession();session=null;
+  if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}
+  stopFx();
+  show('home');
+}
+
+/* hold to exit, so a stray tap doesn't end the game */
+(function(){
+  const b=$('holdBtn');let t=null;
+  const startHold=e=>{e.preventDefault();b.classList.add('go');t=setTimeout(()=>{b.classList.remove('go');endGame()},1500)};
+  const cancel=()=>{clearTimeout(t);b.classList.remove('go')};
+  b.addEventListener('pointerdown',startHold);
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,cancel));
+  b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')endGame()});
+})();
+
+/* ---------- fireworks ---------- */
+const cv=$('fx'),cx=cv.getContext('2d');
+let parts=[],raf=0,fxEnd=0;
+const COLORS=['#FFC93C','#1E9A53','#2F6BFF','#D2433F','#8E44EC','#FF8A1F'];
+const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+function burst(){
+  const w=cv.width,h=cv.height,x=w*(.15+Math.random()*.7),y=h*(.12+Math.random()*.4);
+  const col=COLORS[Math.floor(Math.random()*COLORS.length)],n=reduced?24:70,dpr=window.devicePixelRatio||1;
+  for(let i=0;i<n;i++){
+    const a=Math.PI*2*i/n,sp=(2+Math.random()*4.5)*dpr;
+    parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,col,r:(2.5+Math.random()*2.5)*dpr});
+  }
+  sfx.pop();
+}
+function fireworks(){
+  const dpr=window.devicePixelRatio||1;
+  cv.width=innerWidth*dpr;cv.height=innerHeight*dpr;cv.hidden=false;
+  parts=[];fxEnd=performance.now()+3600;
+  const count=reduced?2:6;
+  for(let i=0;i<count;i++)setTimeout(burst,i*380);
+  cancelAnimationFrame(raf);raf=requestAnimationFrame(step);
+}
+function step(now){
+  cx.clearRect(0,0,cv.width,cv.height);
+  const g=.07*(window.devicePixelRatio||1);
+  parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=g;p.vx*=.985;p.life-=.012;
+    if(p.life>0){cx.globalAlpha=p.life;cx.fillStyle=p.col;cx.beginPath();cx.arc(p.x,p.y,p.r,0,7);cx.fill()}});
+  cx.globalAlpha=1;
+  parts=parts.filter(p=>p.life>0);
+  if(now<fxEnd||parts.length)raf=requestAnimationFrame(step);else stopFx();
+}
+function stopFx(){cancelAnimationFrame(raf);parts=[];cx.clearRect(0,0,cv.width,cv.height);cv.hidden=true}
+
+/* ---------- records ---------- */
+function fmtDur(ms){const s=Math.round(ms/1000),m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0')}
+function fmtDate(t){const d=new Date(t);return (d.getMonth()+1)+'月'+d.getDate()+'日'}
+function fmtTime(t){const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function renderRecords(){
+  const recs=load('pm_records',[]).filter(r=>r.done||r.mistakes).sort((a,b)=>b.start-a.start);
+  const done=recs.reduce((s,r)=>s+r.done,0),mis=recs.reduce((s,r)=>s+r.mistakes,0),ms=recs.reduce((s,r)=>s+r.ms,0);
+  $('totals').innerHTML=
+    '<div class="tot"><span>完成密碼 Codes done</span><strong>'+done+'</strong></div>'+
+    '<div class="tot"><span>撳錯 Wrong presses</span><strong>'+mis+'</strong></div>'+
+    '<div class="tot"><span>總時間 Total time</span><strong>'+fmtDur(ms)+'</strong></div>';
+  if(!recs.length){$('recTable').innerHTML='<div class="empty">未有紀錄。玩一局之後會喺度顯示。<br>No sessions yet.</div>'}
+  else{
+    let h='<table><thead><tr><th>日期</th><th>開始</th><th>位數</th><th>完成</th><th>撳錯</th><th>時間</th></tr></thead><tbody>';
+    recs.forEach(r=>{h+='<tr><td>'+fmtDate(r.start)+'</td><td>'+fmtTime(r.start)+'</td><td>'+r.level+'</td><td>'+r.done+'</td><td>'+r.mistakes+'</td><td>'+fmtDur(r.ms)+'</td></tr>'});
+    $('recTable').innerHTML=h+'</tbody></table>';
+  }
+  renderClear(false,recs.length>0);
+}
+function renderClear(ask,any){
+  const a=$('clearArea');a.innerHTML='';
+  if(!any)return;
+  if(!ask){
+    const b=document.createElement('button');b.type='button';b.className='ghost danger';b.id='clearBtn';b.textContent='清除紀錄 Clear records';
+    b.onclick=()=>renderClear(true,true);a.appendChild(b);return;
+  }
+  a.innerHTML='<span>確定清除所有紀錄？</span>';
+  const y=document.createElement('button');y.type='button';y.className='ghost danger';y.id='clearYes';y.textContent='清除';
+  y.onclick=()=>{store('pm_records',[]);renderRecords()};
+  const n=document.createElement('button');n.type='button';n.className='ghost';n.id='clearNo';n.textContent='取消';
+  n.onclick=()=>renderClear(false,true);
+  a.append(y,n);
+}
+
+buildLevels();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+</script>
+</body>
+</html>
