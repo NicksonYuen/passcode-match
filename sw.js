@@ -1,6 +1,6 @@
 // Offline cache so the game still opens without internet.
 // The page itself is fetched fresh when online, so updates you push to GitHub show up on the next launch.
-const CACHE = 'passcode-match-v1';
+const CACHE = 'passcode-match-v3';
 const FILES = [
   './',
   './index.html',
