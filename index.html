@@ -58,6 +58,24 @@ button:focus-visible{outline:4px solid var(--ink);outline-offset:3px}
 .voice{margin:0;font-size:.95rem;color:var(--muted);text-align:center;max-width:520px;line-height:1.45}
 .voice.warn{color:var(--bad)}
 
+/* ---------- Entry (who is playing) ---------- */
+#entry{align-items:center;justify-content:center;gap:40px;overflow-y:auto}
+.players{display:flex;flex-direction:column;gap:28px;width:100%;max-width:520px}
+.who{border:0;border-radius:32px;padding:clamp(28px,6vh,56px) 24px;font-size:clamp(3rem,11vw,5.5rem);font-weight:700;letter-spacing:.08em;color:#fff;line-height:1}
+.who small{display:block;font-size:1.1rem;font-weight:400;letter-spacing:.02em;margin-top:12px;opacity:.9}
+.who:active{transform:translateY(6px)}
+.who.yyy{background:#2F6BFF;box-shadow:0 8px 0 #1A3F9C}
+.who.yht{background:#E0457B;box-shadow:0 8px 0 #92244B}
+.who.yyy:active{box-shadow:0 2px 0 #1A3F9C}
+.who.yht:active{box-shadow:0 2px 0 #92244B}
+.home-top{width:100%;max-width:560px;display:flex;justify-content:space-between;align-items:center}
+.tag{border-radius:999px;padding:8px 20px;font-weight:700;font-size:1.3rem;color:#fff;letter-spacing:.06em}
+.tag.yyy{background:#2F6BFF}.tag.yht{background:#E0457B}
+.mode{margin:0;color:var(--muted);font-size:1rem;text-align:center}
+
+/* Hidden-code mode (YHT): code boxes show a speaker instead of the digit until she gets it right */
+.cd.hid svg{width:52%;height:52%}
+
 /* ---------- Play ---------- */
 #play{gap:clamp(8px,2vh,20px);align-items:center;position:relative}
 .bar{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center}
@@ -148,12 +166,29 @@ img{max-width:100%}
 </style>
 </head>
 <body>
-<section class="screen" id="home">
+<section class="screen" id="entry">
   <div class="brand">
     <div class="lock" aria-hidden="true"><span class="on">3</span><span>7</span><span>1</span></div>
     <h1>密碼配對</h1>
     <p>Passcode Match</p>
   </div>
+  <div class="players">
+    <button class="who yyy" id="pickYYY" type="button">YYY<small>睇住密碼</small></button>
+    <button class="who yht" id="pickYHT" type="button">YHT<small>聽住密碼</small></button>
+  </div>
+</section>
+
+<section class="screen" id="home" hidden>
+  <div class="home-top">
+    <button class="ghost" id="homeBack" type="button">← 返回</button>
+    <span class="tag" id="playerTag">YYY</span>
+  </div>
+  <div class="brand">
+    <div class="lock" aria-hidden="true"><span class="on">3</span><span>7</span><span>1</span></div>
+    <h1>密碼配對</h1>
+    <p>Passcode Match</p>
+  </div>
+  <p class="mode" id="modeNote"></p>
   <div class="pick">
     <h2>幾多位數字？</h2>
     <div class="levels" id="levels"></div>
@@ -193,7 +228,7 @@ img{max-width:100%}
   <div class="rec-wrap">
     <div class="rec-head">
       <button class="ghost" id="recBack" type="button">← 返回</button>
-      <h2>遊戲紀錄</h2>
+      <h2 id="recTitle">遊戲紀錄</h2>
       <span></span>
     </div>
     <div class="totals" id="totals"></div>
@@ -208,7 +243,8 @@ img{max-width:100%}
 (function(){
 const ZH=['零','一','二','三','四','五','六','七','八','九'];
 const SAY_WRONG='哎呀，請再試一次。';
-const SAY_WIN='你做得好好呀！你係個乖仔！';
+const SAY_WIN='你做得好好呀！你係個乖仔！';        /* YYY */
+const SAY_WIN_YHT='你做得好好呀！你真係個超級乖女！'; /* YHT */
 const SAY_RETRY='請再試一次。';
 const IDLE_MS=10000;
 const $=id=>document.getElementById(id);
@@ -217,8 +253,18 @@ const $=id=>document.getElementById(id);
 function load(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
 function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
+/* ---------- players ---------- */
+/* YYY sees the code. YHT only hears it: the code boxes are hidden and she taps them (or 聽密碼) to listen. */
+const PLAYERS={
+  YYY:{levelKey:'pm_level',    hidden:false,win:SAY_WIN,    note:'睇住密碼，撳返一樣嘅數字。'},
+  YHT:{levelKey:'pm_level_yht',hidden:true, win:SAY_WIN_YHT,note:'密碼收埋咗：撳格仔或者「聽密碼」聽數字。'}
+};
+const SPEAKER='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>';
+let player='YYY';
+const P=()=>PLAYERS[player];
+
 /* ---------- state ---------- */
-let level=load('pm_level',2);
+let level=2;
 let code=[],pos=0,locked=false,prev='',idleTimer=null,session=null,wakeLock=null,current='home';
 
 /* ---------- audio effects ---------- */
@@ -280,7 +326,7 @@ const codeText=()=>code.map(d=>ZH[d]).join('，');
 /* ---------- screens ---------- */
 function show(name){
   current=name;
-  ['home','play','records'].forEach(s=>$(s).hidden=s!==name);
+  ['entry','home','play','records'].forEach(s=>$(s).hidden=s!==name);
 }
 
 /* ---------- home ---------- */
@@ -291,11 +337,22 @@ function buildLevels(){
     b.type='button';b.className='lv';b.id='lv'+n;
     b.setAttribute('aria-pressed',String(n===level));
     b.innerHTML=n+'<small>位</small>';
-    b.onclick=()=>{level=n;store('pm_level',n);buildLevels()};
+    b.onclick=()=>{level=n;store(P().levelKey,n);buildLevels()};
     box.appendChild(b);
   }
 }
-$('testBtn').onclick=()=>{audio();sfx.good();setTimeout(()=>say('你好！'+ZH[3]+'，'+ZH[7]+'。'+SAY_WIN),400)};
+function choosePlayer(name){
+  player=name;
+  level=load(P().levelKey,2);
+  $('playerTag').textContent=name;$('playerTag').className='tag '+name.toLowerCase();
+  $('modeNote').textContent=P().note;
+  buildLevels();
+  show('home');
+}
+$('pickYYY').onclick=()=>{audio();choosePlayer('YYY')};
+$('pickYHT').onclick=()=>{audio();choosePlayer('YHT')};
+$('homeBack').onclick=()=>show('entry');
+$('testBtn').onclick=()=>{audio();sfx.good();setTimeout(()=>say('你好！'+ZH[3]+'，'+ZH[7]+'。'+P().win),400)};
 $('recBtn').onclick=()=>{renderRecords();show('records')};
 $('recBack').onclick=()=>show('home');
 $('startBtn').onclick=startGame;
@@ -327,7 +384,9 @@ function newRound(first){
   $('cheer').hidden=true;
   setLocked(false);
   render();
-  if(first){clearIdle();say('開始！',armIdle)}else armIdle();
+  clearIdle();
+  if(P().hidden)say((first?'開始！':'')+'密碼係：'+codeText()+'。',armIdle); /* she can't see it, so read it out each round */
+  else if(first)say('開始！',armIdle);else armIdle();
 }
 function setLocked(v){locked=v;$('pad').classList.toggle('locked',v)}
 function render(wrongDigit){
@@ -336,8 +395,10 @@ function render(wrongDigit){
   cr.innerHTML='';sr.innerHTML='';
   code.forEach((d,i)=>{
     const c=document.createElement('button');
-    c.type='button';c.className='cd'+(i<pos?' done':i===pos?' next':'');c.textContent=d;
-    c.setAttribute('aria-label','讀出 '+d);
+    const hid=P().hidden&&i>=pos;
+    c.type='button';c.className='cd'+(i<pos?' done':i===pos?' next':'')+(hid?' hid':'');
+    if(hid)c.innerHTML=SPEAKER;else c.textContent=d;
+    c.setAttribute('aria-label',hid?'聽第'+(i+1)+'個數字':'讀出 '+d);
     c.onclick=()=>{clearIdle();say(ZH[d],armIdle)};
     cr.appendChild(c);
     const s=document.createElement('div');
@@ -347,7 +408,7 @@ function render(wrongDigit){
   });
 }
 function ensureSession(){
-  if(!session)session={id:Date.now(),start:Date.now(),level,done:0,mistakes:0,ms:0};
+  if(!session)session={id:Date.now(),start:Date.now(),player,level,done:0,mistakes:0,ms:0};
 }
 function saveSession(){
   if(!session)return;
@@ -378,7 +439,7 @@ function win(){
   $('cheer').hidden=false;
   const p=$('play');p.classList.remove('glow');void p.offsetWidth;p.classList.add('glow');
   fireworks();
-  setTimeout(()=>say(SAY_WIN,()=>setTimeout(()=>{if(current==='play')newRound()},1200)),650);
+  setTimeout(()=>say(P().win,()=>setTimeout(()=>{if(current==='play')newRound()},1200)),650);
 }
 function armIdle(){clearIdle();if(current==='play'&&!document.hidden)idleTimer=setTimeout(onIdle,IDLE_MS)}
 function clearIdle(){clearTimeout(idleTimer);idleTimer=null}
@@ -394,7 +455,7 @@ function endGame(){
   saveSession();session=null;
   if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}
   stopFx();
-  show('home');
+  choosePlayer(player);
 }
 
 /* hold to exit, so a stray tap doesn't end the game */
@@ -445,7 +506,8 @@ function fmtDur(ms){const s=Math.round(ms/1000),m=Math.floor(s/60);return m+':'+
 function fmtDate(t){const d=new Date(t);return (d.getMonth()+1)+'月'+d.getDate()+'日'}
 function fmtTime(t){const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
 function renderRecords(){
-  const recs=load('pm_records',[]).filter(r=>r.done||r.mistakes).sort((a,b)=>b.start-a.start);
+  $('recTitle').textContent=player+' 遊戲紀錄';
+  const recs=load('pm_records',[]).filter(r=>(r.player||'YYY')===player&&(r.done||r.mistakes)).sort((a,b)=>b.start-a.start);
   const done=recs.reduce((s,r)=>s+r.done,0),mis=recs.reduce((s,r)=>s+r.mistakes,0),ms=recs.reduce((s,r)=>s+r.ms,0);
   $('totals').innerHTML=
     '<div class="tot"><span>完成密碼 Codes done</span><strong>'+done+'</strong></div>'+
@@ -466,15 +528,14 @@ function renderClear(ask,any){
     const b=document.createElement('button');b.type='button';b.className='ghost danger';b.id='clearBtn';b.textContent='清除紀錄 Clear records';
     b.onclick=()=>renderClear(true,true);a.appendChild(b);return;
   }
-  a.innerHTML='<span>確定清除所有紀錄？</span>';
+  a.innerHTML='<span>確定清除'+player+'所有紀錄？</span>';
   const y=document.createElement('button');y.type='button';y.className='ghost danger';y.id='clearYes';y.textContent='清除';
-  y.onclick=()=>{store('pm_records',[]);renderRecords()};
+  y.onclick=()=>{store('pm_records',load('pm_records',[]).filter(r=>(r.player||'YYY')!==player));renderRecords()}; /* only this player's */
   const n=document.createElement('button');n.type='button';n.className='ghost';n.id='clearNo';n.textContent='取消';
   n.onclick=()=>renderClear(false,true);
   a.append(y,n);
 }
 
-buildLevels();
 })();
 </script>
 <script>
