@@ -299,7 +299,7 @@ img{max-width:100%}
 const ZH=['零','一','二','三','四','五','六','七','八','九'];
 const SAY_WRONG='哎呀，請再試一次。';
 const SAY_WIN='你做得好好呀，你係個乖仔呀！';        /* YYY */
-const SAY_WIN_YHT='你做得好好呀！你真係個超級乖女！'; /* YHT */
+const SAY_WIN_YHT='屙臭臭，屙臭臭！'; /* YHT */
 const SAY_RETRY='請再試一次。';
 const IDLE_MS=10000;
 const DANCE_MS=5000; /* how long the celebration character plays after a code is finished */
@@ -312,8 +312,8 @@ function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 /* ---------- players ---------- */
 /* YYY sees the code. YHT only hears it: the code boxes are hidden and she taps them (or 聽密碼) to listen. */
 const PLAYERS={
-  YYY:{levelKey:'pm_level',    hidden:false,dance:true, win:SAY_WIN,    note:'睇住密碼，撳返一樣嘅數字。'},
-  YHT:{levelKey:'pm_level_yht',hidden:true, dance:true, win:SAY_WIN_YHT,note:'密碼收埋咗：撳格仔或者「聽密碼」聽數字。'}
+  YYY:{levelKey:'pm_level',    hidden:false,dance:true, rain:false,win:SAY_WIN,    note:'睇住密碼，撳返一樣嘅數字。'},
+  YHT:{levelKey:'pm_level_yht',hidden:true, dance:false,rain:true, win:SAY_WIN_YHT,note:'密碼收埋咗：撳格仔或者「聽密碼」聽數字。'}
 };
 const SPEAKER='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>';
 let player='YYY';
@@ -502,7 +502,7 @@ function win(){
   $('dancer').hidden=!dance;
   if(dance)runAround();
   const p=$('play');p.classList.remove('glow');void p.offsetWidth;p.classList.add('glow');
-  fireworks();
+  if(P().rain)poopRain();else fireworks();
   /* the next code starts on a fixed timer, so a cut-off praise line can never stop the game */
   setTimeout(()=>{if(current==='play')say(P().win)},650);
   afterTimer=setTimeout(()=>{if(current==='play')newRound()},DANCE_MS+800);
@@ -595,6 +595,42 @@ function step(now){
   cx.globalAlpha=1;
   parts=parts.filter(p=>p.life>0);
   if(now<fxEnd||parts.length)raf=requestAnimationFrame(step);else stopFx();
+}
+/* ---------- poop rain (YHT win): cartoon poops fall from the top for DANCE_MS ---------- */
+let poopSprite=null;
+function makePoop(){
+  const c=document.createElement('canvas');c.width=c.height=200;
+  const g=c.getContext('2d');g.scale(2,2);
+  g.lineWidth=3;g.strokeStyle='#5A3417';g.fillStyle='#8B5A2B';
+  const blob=(x,y,rx,ry)=>{g.beginPath();g.ellipse(x,y,rx,ry,0,0,7);g.fill();g.stroke()};
+  g.beginPath();g.moveTo(44,34);g.quadraticCurveTo(48,16,62,10);g.quadraticCurveTo(58,24,60,34);g.closePath();g.fill();g.stroke(); /* the curly tip */
+  blob(50,40,22,12);blob(50,60,33,14);blob(50,80,44,16);
+  g.fillStyle='rgba(255,255,255,.22)';[[42,36,8,3],[38,55,11,3.5],[34,75,14,4]].forEach(([x,y,rx,ry])=>{g.beginPath();g.ellipse(x,y,rx,ry,0,0,7);g.fill()});
+  g.fillStyle='#fff';g.lineWidth=2;[[40,58],[60,58]].forEach(([x,y])=>{g.beginPath();g.arc(x,y,7.5,0,7);g.fill();g.stroke()});
+  g.fillStyle='#1E1512';[[41,59],[61,59]].forEach(([x,y])=>{g.beginPath();g.arc(x,y,3.6,0,7);g.fill()});
+  g.strokeStyle='#3A2210';g.lineWidth=3;g.lineCap='round';g.beginPath();g.arc(50,76,10,.15*Math.PI,.85*Math.PI);g.stroke();
+  return c;
+}
+function poopRain(){
+  if(!poopSprite)poopSprite=makePoop();
+  const dpr=window.devicePixelRatio||1;
+  cv.width=innerWidth*dpr;cv.height=innerHeight*dpr;cv.hidden=false;
+  parts=[];fxEnd=performance.now()+DANCE_MS;
+  let next=0,n=0;
+  const drop=()=>{
+    const sz=(38+Math.random()*46)*dpr;
+    parts.push({x:Math.random()*cv.width,y:-sz,vy:(6+Math.random()*5)*dpr,sz,rot:(Math.random()-.5)*.4,vr:(Math.random()-.5)*.012,ph:Math.random()*6});
+    if(++n%4===0)tone(170,0,.16,'sine',.12,70); /* a little plop */
+  };
+  const rain=now=>{
+    cx.clearRect(0,0,cv.width,cv.height);
+    if(now<fxEnd-1500&&now>=next){drop();if(!reduced)drop();next=now+(reduced?260:110)}
+    parts.forEach(p=>{p.y+=p.vy;p.rot+=p.vr;p.ph+=.05;
+      cx.save();cx.translate(p.x+Math.sin(p.ph)*6*dpr,p.y);cx.rotate(p.rot);cx.drawImage(poopSprite,-p.sz/2,-p.sz/2,p.sz,p.sz);cx.restore()});
+    parts=parts.filter(p=>p.y<cv.height+p.sz);
+    if(now<fxEnd||parts.length)raf=requestAnimationFrame(rain);else stopFx();
+  };
+  cancelAnimationFrame(raf);raf=requestAnimationFrame(rain);
 }
 function stopFx(){cancelAnimationFrame(raf);parts=[];cx.clearRect(0,0,cv.width,cv.height);cv.hidden=true}
 
